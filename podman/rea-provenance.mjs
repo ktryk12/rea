@@ -31,8 +31,7 @@ const required = (name) => {
 };
 
 /** POSIX-style path relative to a root, so a record reads the same anywhere. */
-const relativePosix = (root, path) =>
-  relative(root, path).split(sep).join("/");
+const relativePosix = (root, path) => relative(root, path).split(sep).join("/");
 
 const sha256File = (path) =>
   createHash("sha256").update(readFileSync(path)).digest("hex");
@@ -131,7 +130,9 @@ const record = {
   output: outputEntries,
 };
 
-if (record.runtime.rea_source_sha_baked_in_image !== record.runtime.rea_source_sha)
+if (
+  record.runtime.rea_source_sha_baked_in_image !== record.runtime.rea_source_sha
+)
   throw new Error(
     `rea-provenance: image label ${record.runtime.rea_source_sha} does not match baked source ${record.runtime.rea_source_sha_baked_in_image}`,
   );

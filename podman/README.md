@@ -159,14 +159,39 @@ filesystem (writes fail `EROFS`), a capped `noexec,nosuid` tmpfs for `/tmp`,
 
 ### Run provenance
 
-Each run writes `rea-run-provenance.json` into the output directory recording
-the operation and exit code, the runtime image ID, the REA source SHA and
-whether that tree was clean, the pinned base digest, the input digest and mount
-mode, the enforced isolation properties, and a digest per output file.
+Each run writes `rea-run-provenance.json` into the output directory. It is
+produced by `podman/rea-provenance.mjs` running in the **same image ID**, with
+the input mounted read-only.
 
-The wrapper computes the input digest independently of REA. In the verified run
-it matched REA's own `subject.digest.sha256`, so both agree on which bytes were
-analysed.
+The wrapper itself builds no JSON and computes no digests, and it needs no node
+on the host. Scalars reach the provenance script through environment variables
+and the operation arguments reach it as real argv elements, so nothing is parsed
+or encoded by a shell. This is deliberate: the first shell implementation had
+two escaping defects, one of which silently wrote empty `path` values, which is
+the worst possible failure for a provenance record — well-formed and
+meaningless. A failed provenance write fails the run with exit 4.
+
+Three properties worth stating precisely:
+
+- **Identity is resolved once, by image ID.** A tag is a mutable pointer, so
+  inspecting a tag and then starting a container from that same tag leaves a
+  window in which the tag could move. The tag is resolved to an immutable image
+  ID before anything runs, and every container is started from that ID. The
+  record says `"started_from": "image_id"`.
+- **The runtime is verified before it analyses anything.** The source commit
+  baked into the image must agree with the label on the resolved image ID. A
+  mismatch exits 3 and nothing is analysed. Verified with a deliberately
+  tampered image: refused, output directory left empty.
+- **Input digests cover names and structure, not only contents.** Hashing just
+  the set of file digests gives two different trees the same value whenever
+  their contents match but their layout does not. Directories are included, so
+  a rename or an added empty directory changes the value.
+
+Output paths are recorded relative to the output directory, so `a/report.json`
+and `b/report.json` stay distinct instead of collapsing to one `report.json`.
+
+For a single-file input the wrapper's digest can be compared with REA's own
+`subject.digest.sha256`; in the verified run the two agreed.
 
 ### Windows shell note
 

@@ -99,6 +99,24 @@ source_tree="$(podman image inspect --format '{{index .Labels "org.virkora.rea.s
 
 BASE_DIGEST="sha256:83f1c388c31fb2e51f7cbd4dea949b96260798c98f206e8e4696bc93bd964e3a"
 
+# Verify the runtime BEFORE it analyses anything. The source commit baked into
+# the image must agree with the label on the image ID we resolved; otherwise
+# this is not an image built by Containerfile.rea-runtime as claimed, and its
+# provenance would be a fiction. Checking afterwards would still refuse the
+# record, but only once an unverified runtime had already touched the input.
+baked_sha="$(podman run --rm --network=none --read-only --cap-drop=ALL \
+  --security-opt=no-new-privileges --entrypoint /usr/local/bin/node \
+  "$image_id" -p \
+  'require("node:fs").readFileSync("/opt/rea/.rea-source-sha","utf8").trim()' \
+  2>/dev/null | tr -d '\r\n')"
+if [ "$baked_sha" != "$source_sha" ]; then
+  echo "rea-analyze: runtime provenance mismatch, refusing to analyse" >&2
+  echo "  image            : $IMAGE ($image_id)" >&2
+  echo "  label source sha : $source_sha" >&2
+  echo "  baked source sha : $baked_sha" >&2
+  exit 3
+fi
+
 status=0
 podman run --rm \
   --network=none \
