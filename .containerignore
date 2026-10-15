@@ -1,0 +1,11 @@
+# Keep the Podman build context small and host-independent.
+# node_modules holds win32 binaries that must never enter a Linux image;
+# the image installs from package-lock.json instead.
+.git
+node_modules
+dist
+website
+coverage
+test-results.xml
+native/windows/build
+build

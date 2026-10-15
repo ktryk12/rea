@@ -1,0 +1,44 @@
+# REA build and test container (Podman, rootless)
+#
+# Purpose: reproduce the REA TypeScript build and the platform-independent test
+# suites without Docker, Docker Desktop, or a Docker daemon.
+#
+# The base image is pinned by digest. node:24-alpine @ this digest provides
+# Node v24.21.0, which satisfies package.json engines (^24.11.0).
+# Re-pin deliberately; never float the tag.
+FROM docker.io/library/node@sha256:83f1c388c31fb2e51f7cbd4dea949b96260798c98f206e8e4696bc93bd964e3a
+
+# git is required: REA's build reads repository state; isomorphic-git tests and
+# provenance checks expect a usable git binary.
+#
+# Pinned exactly, with no `||` fallback. A fallback to an unpinned package
+# would silently install a different toolchain and defeat the point of pinning
+# the base by digest. If this version disappears from the Alpine repository the
+# build must FAIL loudly so the pin is updated deliberately.
+#
+# procps-ng supplies a procps-compatible `ps`. Alpine ships busybox `ps`, which
+# REA's Linux process-ownership inspection rejects ("requires a
+# procps-compatible ps on REA's PATH"), producing test failures that say
+# nothing about REA. It is GPL-2.0-or-later AND LGPL-2.1-or-later; this is a
+# local development/test image that is not redistributed, and it is
+# deliberately NOT added to the analysis runtime image.
+RUN apk add --no-cache git=2.54.0-r0 procps-ng=4.0.6-r0
+
+# Unprivileged build user. The node image already ships uid/gid 1000 as "node".
+USER node
+WORKDIR /work
+
+# No dependencies are baked into the image. The repository is bind-mounted at
+# run time, so the image stays independent of our source revision and the
+# lockfile remains the single source of truth.
+#
+# HUSKY=0 keeps the root `prepare` script from installing git hooks.
+# --ignore-scripts is permanent policy for this fork.
+ENV HUSKY=0 \
+    npm_config_ignore_scripts=true \
+    npm_config_fund=false \
+    npm_config_audit=false \
+    CI=1
+
+ENTRYPOINT ["/bin/sh", "-lc"]
+CMD ["node --version && npm --version"]

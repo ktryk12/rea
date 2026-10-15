@@ -77,3 +77,9 @@ Thumbs.db
 website/_site/
 # Temporary translation output prepared before replacing the complete site.
 website/.i18n-*/
+
+# Scratch space for podman/rea-verify-source.sh
+.rea-verify-work/
+.rea-build-context/
+.rea-gate-work/
+.rea-gate-tamper/
