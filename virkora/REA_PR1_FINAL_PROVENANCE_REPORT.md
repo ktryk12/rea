@@ -217,12 +217,16 @@ podman runs the gate unmodified.
 
 Local, at `da8453a15233cb78c5b6f0c927dfed642b16cbd7`, Windows 11 host with
 rootless podman 5.8.3 and Node v24.11.1 (runtime container Node v24.21.0):
+Run `38728943883`, head `b8a672ab4`, conclusion **success**.
 
-| Stage                   | Checks | Result              |
-| ----------------------- | ------ | ------------------- |
-| `ci-gate.sh static`     | 5      | **5 pass**, exit 0  |
-| `ci-gate.sh provenance` | 4      | **4 pass**, exit 0  |
-| `ci-gate.sh negative`   | 13     | **13 pass**, exit 0 |
+| Stage        | Result on ubuntu-24.04, podman 4.9.3 rootless, crun                               |
+| ------------ | --------------------------------------------------------------------------------- |
+| `static`     | **success** - typecheck, compile, repository-wide format, lint, 3233 domain tests |
+| `provenance` | **success** - all four checks, including both source-binding directions           |
+| `negative`   | **success** - 13 of 13                                                            |
+
+Earlier runs on the same branch failed the `negative` stage at 11 of 13 and,
+before that, did not start at all. Each cause is below.
 
 `static`: typecheck, compile, `oxfmt --check .` across all 3594 files, `oxlint`,
 and the full `domain` project (193 files, 3233 tests).
@@ -243,7 +247,32 @@ broad `test:fast` suite fails 214 on Windows and 39 in the container at
 
 ### CI result
 
-See section 7; recorded after the run completed.
+The gate runs on GitHub. Results by stage, over successive commits:
+
+| Stage        | Result on `ubuntu-24.04`, podman 4.9.3 rootless, crun                                                         |
+| ------------ | ------------------------------------------------------------------------------------------------------------- |
+| `static`     | **success** - typecheck, compile, repository-wide format, lint, 3233 domain tests                             |
+| `provenance` | **success** - all four checks, including both source-binding directions                                       |
+| `negative`   | 11 of 13; the two manifest-dependent checks blocked by a rootless id-mapping defect, fixed as described below |
+
+Three defects were found only by running on a second platform, which is the
+reason for having CI at all:
+
+1. `Permission denied`, exit 126: the scripts were committed mode 100644.
+2. `/bin/sh: syntax error: unterminated quoted string` while building the tamper
+   fixture: the gate generated it with `echo "... printf '
+   ' ..."`, and dash's
+   echo expands backslash escapes while bash's does not.
+3. `EACCES` writing the provenance record to the bind-mounted output directory.
+   The container runs as the image user (`node`, uid 1000) while the output
+   directory belongs to the invoking host user; rootless podman maps those to
+   different ids. Plain `--userns=keep-id` did **not** fix it, because it maps
+   the _invoking_ user's id and the process still runs as uid 1000.
+   `--userns=keep-id:uid=1000,gid=1000` maps container uid 1000 to the caller
+   and does. Host uids differ widely - 1001 on the runner, a Windows-derived
+   197608 locally - and `--user "$(id -u)"` is rejected on the latter
+   ("doesn't map UID 197608"), so naming the container-side ids is the only
+   portable form.
 
 ## 6. Defects found in our own work during this round
 
@@ -278,7 +307,9 @@ Recorded because they bear on how much the gate can be trusted.
 
 ## 7. CI run
 
-Recorded after the gate executed on GitHub; see the PR for the live status.
+Actions executes the gate; see section 5 for stage results and section 4 for
+how Actions came to be enabled and what else it activated. The PR carries the
+live status for the current head commit.
 
 ## 8. Changed files
 
