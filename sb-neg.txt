@@ -1,0 +1,36 @@
+image      : localhost/rea-runtime-srctamper:test
+image id   : 334a81b253818d918924720394bec1696918ea3a751232160b8acae3bb1028dd
+declared   : f8ed755b8600b41a1f7c28d580ca94e40868714a
+{
+  "verdict": "SOURCE_BINDING_FAILED",
+  "files_expected": 3805,
+  "files_in_image": 3805,
+  "ignored_by_commit": [
+    ".git",
+    "node_modules",
+    "dist",
+    "website",
+    "coverage",
+    "test-results.xml",
+    "native/windows/build",
+    "build",
+    "node_modules",
+    "dist",
+    ".rea-source-sha",
+    ".rea-source-dirty"
+  ],
+  "missing_from_image": [],
+  "modified_in_image": [
+    {
+      "path": "podman/rea-digest.mjs",
+      "expected": "000d9a60aa8fe8d1f55c2da1e4374c3e395a9fe7fecc03273232495e17f79757",
+      "actual": "8a6d2601f04928df70f963db33b2b4ef309362b335dacb934fa964cd99c0e3f9"
+    },
+    {
+      "path": "scripts/rea.mjs",
+      "expected": "369813033dee10571a83c0656d90b5c8493270556896ddd079afb1bbe4b385ca",
+      "actual": "eba7f2992c453a96d5a172b94fc02d9c25857ff3742ecd96f19494ecb1575da7"
+    }
+  ],
+  "not_in_commit": []
+}
