@@ -26,10 +26,13 @@
 
 name: virkora gate
 
+# A pull request and a push to the same branch would otherwise run this gate
+# twice for one commit, since their refs differ and concurrency cannot collapse
+# them. Pushes are therefore gated on main only; feature branches are covered
+# by their pull request, and workflow_dispatch covers anything else.
 on:
   push:
     branches:
-      - "feat/**"
       - main
   pull_request:
     branches:
