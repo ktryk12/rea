@@ -17,7 +17,7 @@
 #   REA gains in a future version does not become callable here until it is
 #   added deliberately.
 #
-# Isolation properties, all enforced on the podman command line below:
+# Isolation properties, all enforced on the podman command lines below:
 #   - rootless; no --privileged, no capabilities, no privilege escalation
 #   - no network at all (--network=none)
 #   - the analysis target is mounted READ-ONLY and never written to
@@ -28,8 +28,12 @@
 #   - no host credentials, SSH keys, or production repositories are mounted
 #
 # Provenance: the runtime is an immutable image built by
-# podman/Containerfile.rea-runtime, never a mutable volume, so the recorded
-# image ID identifies the exact bytes that performed the analysis.
+# podman/Containerfile.rea-runtime, never a mutable volume. The tag is resolved
+# to an image ID once and every container is started from that ID, so the
+# recorded identity is the one that executed. The record itself is written by
+# podman/rea-provenance.mjs running in that same image; this script builds no
+# JSON and computes no digests, because hand-rolled shell escaping is where
+# provenance records go wrong.
 set -eu
 
 # Read-only, evidence-producing operations that need no bring-your-own engine.
@@ -82,23 +86,18 @@ fi
 [ -e "$INPUT" ] || { echo "rea-analyze: input not found: $INPUT" >&2; exit 2; }
 mkdir -p "$OUTPUT"
 
-# Identify the runtime and the input before running anything.
+# ---------------------------------------------------------------------------
+# Resolve the runtime ONCE, by image ID
+# ---------------------------------------------------------------------------
+# A tag is a mutable pointer. Inspecting a tag and then starting a container
+# from the same tag leaves a window in which the tag could be moved, so the
+# recorded image ID would not be the image that ran.
 image_id="$(podman image inspect --format '{{.Id}}' "$IMAGE")"
-source_sha="$(podman image inspect --format '{{index .Labels "org.virkora.rea.source.sha"}}' "$IMAGE")"
-source_tree="$(podman image inspect --format '{{index .Labels "org.virkora.rea.source.dirty"}}' "$IMAGE")"
+[ -n "$image_id" ] || { echo "rea-analyze: cannot resolve image: $IMAGE" >&2; exit 2; }
+source_sha="$(podman image inspect --format '{{index .Labels "org.virkora.rea.source.sha"}}' "$image_id")"
+source_tree="$(podman image inspect --format '{{index .Labels "org.virkora.rea.source.dirty"}}' "$image_id")"
 
-input_digest() {
-  if [ -f "$1" ]; then
-    sha256sum "$1" | cut -d' ' -f1
-  else
-    # Directory: digest over the sorted per-file digests, so the value is
-    # reproducible and independent of traversal order.
-    find "$1" -type f -exec sha256sum {} + 2>/dev/null |
-      cut -d' ' -f1 | LC_ALL=C sort | sha256sum | cut -d' ' -f1
-  fi
-}
-in_digest="$(input_digest "$INPUT")"
-in_kind="$(if [ -f "$INPUT" ]; then echo file; else echo directory; fi)"
+BASE_DIGEST="sha256:83f1c388c31fb2e51f7cbd4dea949b96260798c98f206e8e4696bc93bd964e3a"
 
 status=0
 podman run --rm \
@@ -113,48 +112,37 @@ podman run --rm \
   -v "$INPUT":/analysis/input:ro \
   -v "$OUTPUT":/analysis/output:rw \
   -w /analysis/output \
-  "$IMAGE" \
+  "$image_id" \
   /opt/rea/scripts/rea.mjs "$OPERATION" "$@" || status=$?
 
-# Record provenance for this run next to its output. Written last so the
-# recorded output digests describe the files the analysis actually produced.
-manifest="$OUTPUT/rea-run-provenance.json"
-out_files="$(find "$OUTPUT" -type f ! -name 'rea-run-provenance.json' 2>/dev/null |
-  LC_ALL=C sort |
-  while IFS= read -r f; do
-    printf '    {"path": "%s", "sha256": "%s"},\n' \
-      "$(basename "$f")" "$(sha256sum "$f" | cut -d' ' -f1)"
-  done | sed '$ s/,$//')"
-
-cat > "$manifest" <<JSON
-{
-  "operation": "$OPERATION",
-  "exit_code": $status,
-  "runtime": {
-    "image": "$IMAGE",
-    "image_id": "$image_id",
-    "rea_source_sha": "$source_sha",
-    "rea_source_tree": "$source_tree",
-    "base_image_digest": "sha256:83f1c388c31fb2e51f7cbd4dea949b96260798c98f206e8e4696bc93bd964e3a"
-  },
-  "input": {
-    "kind": "$in_kind",
-    "sha256": "$in_digest",
-    "mounted_at": "/analysis/input",
-    "mode": "read-only"
-  },
-  "isolation": {
-    "network": "none",
-    "root_filesystem": "read-only",
-    "capabilities": "all dropped",
-    "no_new_privileges": true,
-    "podman_socket_mounted": false,
-    "rootless": true
-  },
-  "output": [
-$out_files
-  ]
-}
-JSON
+# ---------------------------------------------------------------------------
+# Record provenance
+# ---------------------------------------------------------------------------
+# Written by node inside the same image ID, so the record is valid JSON by
+# construction and the input digest covers names and tree structure, not just
+# contents. Scalars arrive through the environment and the operation arguments
+# arrive as real argv elements, so nothing is parsed or encoded by a shell.
+#
+# The provenance script also re-reads the source commit baked into the image
+# and refuses to write a record if it disagrees with the image label.
+podman run --rm \
+  --network=none \
+  --read-only \
+  --cap-drop=ALL \
+  --security-opt=no-new-privileges \
+  --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+  --entrypoint /usr/local/bin/node \
+  -v "$INPUT":/analysis/input:ro \
+  -v "$OUTPUT":/analysis/output:rw \
+  -e REA_PROV_OPERATION="$OPERATION" \
+  -e REA_PROV_EXIT="$status" \
+  -e REA_PROV_IMAGE_REF="$IMAGE" \
+  -e REA_PROV_IMAGE_ID="$image_id" \
+  -e REA_PROV_SOURCE_SHA="$source_sha" \
+  -e REA_PROV_SOURCE_TREE="$source_tree" \
+  -e REA_PROV_BASE_DIGEST="$BASE_DIGEST" \
+  "$image_id" \
+  /opt/rea/podman/rea-provenance.mjs "$@" ||
+  { echo "rea-analyze: provenance record failed" >&2; exit 4; }
 
 exit $status
