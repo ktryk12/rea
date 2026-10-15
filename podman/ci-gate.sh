@@ -77,9 +77,13 @@ analyze_input_digest() {
   _g_src="$1"
   _g_dest="$2"
   rm -f "$_g_dest/rea-run-provenance.json"
-  sh "$repo_root/podman/rea-analyze.sh" "$_g_src" "$_g_dest" inspect-artifact /snapshot/input >/dev/null 2>&1 || true
+  # Keep the wrapper output: when no manifest appears, the reason is the only
+  # thing worth having, and discarding it turns a real failure into a riddle.
+  _g_log="$("$repo_root/podman/rea-analyze.sh" "$_g_src" "$_g_dest" inspect-artifact /snapshot/input 2>&1 || true)"
   if [ ! -f "$_g_dest/rea-run-provenance.json" ]; then
     echo "NO_MANIFEST"
+    echo "no manifest for $_g_src; wrapper said:" >&2
+    printf '%s' "$_g_log" | tail -20 | sed 's/^/        /' >&2
     return 0
   fi
   # node runs from the repository root with a RELATIVE path: native node on
