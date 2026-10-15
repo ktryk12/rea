@@ -46,11 +46,12 @@ label_sha="$(podman image inspect --format '{{index .Labels "org.virkora.rea.sou
 # claims, so there is nothing meaningful left to compare against.
 # keep-id for the same reason as in rea-analyze.sh: rootless podman otherwise
 # maps the container user to a different host id, and a container write to a
-# bind-mounted directory owned by the invoking user fails with EACCES. These
-# runs only read, but the flag keeps both scripts behaving identically.
+# bind-mounted directory owned by the invoking user fails with EACCES. The
+# uid/gid parameters map the image's own user (node, uid 1000) to the caller.
+# These runs only read, but the flag keeps both scripts behaving identically.
 USERNS=""
 if [ "$(podman info --format '{{.Host.Security.Rootless}}' 2>/dev/null)" = "true" ]; then
-  USERNS="--userns=keep-id"
+  USERNS="--userns=keep-id:uid=1000,gid=1000"
 fi
 
 baked_sha="$(podman run --rm $USERNS --network=none --read-only --cap-drop=ALL \

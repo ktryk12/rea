@@ -125,11 +125,19 @@ BASE_DIGEST="sha256:83f1c388c31fb2e51f7cbd4dea949b96260798c98f206e8e4696bc93bd96
 # on CI, while a local run on a different host silently worked. Image files are
 # world-readable, so reading /opt/rea is unaffected.
 #
+# The uid/gid parameters matter. Plain keep-id maps the INVOKING user's id into
+# the container, but the image still runs as its own USER (node, uid 1000),
+# which that mapping does not cover - so the write still failed. Naming the
+# container-side ids maps uid 1000 to the caller instead, which is what makes a
+# bind-mounted output directory writable while the host user still owns the
+# files afterwards. Host uids vary widely (1001 on a CI runner, a
+# Windows-derived 197608 here), so nothing may assume a particular value.
+#
 # keep-id is only valid for rootless podman; under a root podman the ids
 # already line up and passing it would be an error.
 USERNS=""
 if [ "$(podman info --format '{{.Host.Security.Rootless}}' 2>/dev/null)" = "true" ]; then
-  USERNS="--userns=keep-id"
+  USERNS="--userns=keep-id:uid=1000,gid=1000"
 fi
 
 # Verify the runtime BEFORE it analyses anything. The source commit baked into

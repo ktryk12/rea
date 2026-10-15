@@ -235,16 +235,24 @@ For a single-file input the wrapper's digest can be compared with REA's own
 
 ### Rootless user mapping
 
-Every container is started with `--userns=keep-id` when podman reports itself
-rootless, so the calling user is mapped into the container.
+Every container is started with `--userns=keep-id:uid=1000,gid=1000` when
+podman reports itself rootless, which maps the image's own user (`node`, uid 1000) to the invoking host user.
 
 Without it the container process is the image user (uid 1000) while the
 bind-mounted output directory belongs to the invoking host user. Rootless podman
 maps those to different ids, and writing the provenance record fails with
-`EACCES`. This passed on a host whose uid happens to be 1000 and failed on CI,
-where it is not - the kind of difference only a second platform finds. Image
-files are world-readable, so reading `/opt/rea` is unaffected, and the flag is
-omitted under a root podman where the ids already line up.
+`EACCES`.
+
+The uid/gid parameters are the part that matters. Plain `keep-id` maps the
+_invoking_ user's id into the container, but the process still runs as the
+image's `USER node`, which that mapping does not cover, so the write still
+failed. Naming the container-side ids maps uid 1000 to the caller instead, and
+the host user still owns the files afterwards.
+
+Host uids vary widely - 1001 on a CI runner, a Windows-derived 197608 on this
+machine - so nothing here may assume a particular value. Image files are
+world-readable, so reading `/opt/rea` is unaffected, and the flag is omitted
+under a root podman where the ids already line up.
 
 ### Windows shell note
 
