@@ -1,13 +1,16 @@
 #!/bin/sh
 # Run ONE approved REA analysis operation inside a hardened, rootless Podman
-# container, and record what actually executed.
+# container, against an immutable snapshot of the input, and record what
+# actually executed.
 #
 #   ./podman/rea-analyze.sh <input-file-or-dir> <output-dir> <operation> [args...]
 #
+# The input is available inside the container at /snapshot/input.
+#
 # Argument handling (this is a security boundary, not a convenience):
-#   The container is started with `--entrypoint /usr/local/bin/node` and the
+#   Every container is started with `--entrypoint /usr/local/bin/node`, and the
 #   script path plus every caller argument are passed as SEPARATE argv
-#   elements. No shell inside the container ever parses caller input, so an
+#   elements. No shell inside a container ever parses caller input, so an
 #   argument cannot introduce a second command. Do not reintroduce `sh -lc`
 #   and do not build a command string.
 #
@@ -17,23 +20,28 @@
 #   REA gains in a future version does not become callable here until it is
 #   added deliberately.
 #
-# Isolation properties, all enforced on the podman command lines below:
+# Isolation, all enforced on the podman command lines below:
 #   - rootless; no --privileged, no capabilities, no privilege escalation
 #   - no network at all (--network=none)
-#   - the analysis target is mounted READ-ONLY and never written to
+#   - the analysis reads a read-only snapshot, never the caller's live input
 #   - the only writable bind mount is the caller's output directory
 #   - the container root filesystem is read-only; scratch is a capped tmpfs
-#   - the Podman socket is NEVER mounted, so analysis code cannot reach the
-#     container engine
+#   - the Podman socket is NEVER mounted
 #   - no host credentials, SSH keys, or production repositories are mounted
 #
-# Provenance: the runtime is an immutable image built by
-# podman/Containerfile.rea-runtime, never a mutable volume. The tag is resolved
-# to an image ID once and every container is started from that ID, so the
-# recorded identity is the one that executed. The record itself is written by
-# podman/rea-provenance.mjs running in that same image; this script builds no
-# JSON and computes no digests, because hand-rolled shell escaping is where
-# provenance records go wrong.
+# Why a snapshot: the analysis and the provenance record are separate container
+# runs. Reading the caller's live path in both would let the bytes change in
+# between, so the record could attest something that was never analysed. The
+# snapshot is written once into a per-run volume and mounted read-only
+# afterwards, and its digest is taken before the analysis and re-checked when
+# the record is written.
+#
+# Identity: the image reference is resolved to an immutable image ID once, and
+# every container is started from that ID. Before anything is analysed, the
+# commit baked into the image must agree with the image label. Content-level
+# proof that the image holds that commit's sources is a separate, stronger
+# check - see podman/rea-verify-source.sh - and whether it was run for this
+# invocation is recorded in the manifest.
 set -eu
 
 # Read-only, evidence-producing operations that need no bring-your-own engine.
@@ -57,6 +65,7 @@ inspect-go-binary
 
 usage() {
   echo "usage: rea-analyze.sh <input> <output-dir> <operation> [args...]" >&2
+  echo "the input is mounted at /snapshot/input" >&2
   echo "approved operations:" >&2
   for op in $APPROVED_OPERATIONS; do echo "  $op" >&2; done
   exit 2
@@ -85,6 +94,14 @@ fi
 
 [ -e "$INPUT" ] || { echo "rea-analyze: input not found: $INPUT" >&2; exit 2; }
 mkdir -p "$OUTPUT"
+
+snapshot_volume=""
+cleanup() {
+  if [ -n "$snapshot_volume" ]; then
+    podman volume rm "$snapshot_volume" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT INT TERM
 
 # ---------------------------------------------------------------------------
 # Resolve the runtime ONCE, by image ID
@@ -117,6 +134,42 @@ if [ "$baked_sha" != "$source_sha" ]; then
   exit 3
 fi
 
+# Full content-level source binding is an explicit, separate step because it
+# needs the Git repository. Set REA_REQUIRE_SOURCE_BINDING=1 to demand it here.
+source_binding="not-verified-in-this-run"
+if [ "${REA_REQUIRE_SOURCE_BINDING:-0}" = "1" ]; then
+  if "$(dirname -- "$0")/rea-verify-source.sh" "$image_id" >/dev/null; then
+    source_binding="verified-against-git-$source_sha"
+  else
+    echo "rea-analyze: source binding verification failed, refusing to analyse" >&2
+    exit 7
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# Immutable input snapshot
+# ---------------------------------------------------------------------------
+# Written once, read-only everywhere afterwards. Symbolic links and other
+# special files are refused rather than copied: a symlink has no content of its
+# own to attest, and following it would leave the declared input.
+snapshot_volume="$(podman volume create)"
+
+input_sha256="$(podman run --rm \
+  --network=none \
+  --read-only \
+  --cap-drop=ALL \
+  --security-opt=no-new-privileges \
+  --entrypoint /usr/local/bin/node \
+  -v "$INPUT":/src:ro \
+  -v "$snapshot_volume":/snapshot:rw \
+  "$image_id" \
+  /opt/rea/podman/rea-snapshot.mjs | tr -d '\r\n')"
+
+if [ -z "$input_sha256" ]; then
+  echo "rea-analyze: input snapshot failed; nothing was analysed" >&2
+  exit 5
+fi
+
 status=0
 podman run --rm \
   --network=none \
@@ -127,7 +180,7 @@ podman run --rm \
   --memory=4g \
   --pids-limit=512 \
   --entrypoint /usr/local/bin/node \
-  -v "$INPUT":/analysis/input:ro \
+  -v "$snapshot_volume":/snapshot:ro \
   -v "$OUTPUT":/analysis/output:rw \
   -w /analysis/output \
   "$image_id" \
@@ -136,13 +189,11 @@ podman run --rm \
 # ---------------------------------------------------------------------------
 # Record provenance
 # ---------------------------------------------------------------------------
-# Written by node inside the same image ID, so the record is valid JSON by
-# construction and the input digest covers names and tree structure, not just
-# contents. Scalars arrive through the environment and the operation arguments
-# arrive as real argv elements, so nothing is parsed or encoded by a shell.
-#
-# The provenance script also re-reads the source commit baked into the image
-# and refuses to write a record if it disagrees with the image label.
+# Written by node inside the same image ID, over the same read-only snapshot.
+# Scalars arrive through the environment and the operation arguments arrive as
+# real argv elements, so nothing is parsed or encoded by a shell. The script
+# re-checks the snapshot digest and the image provenance, and refuses to write
+# a record it cannot vouch for.
 podman run --rm \
   --network=none \
   --read-only \
@@ -150,7 +201,7 @@ podman run --rm \
   --security-opt=no-new-privileges \
   --tmpfs /tmp:rw,noexec,nosuid,size=64m \
   --entrypoint /usr/local/bin/node \
-  -v "$INPUT":/analysis/input:ro \
+  -v "$snapshot_volume":/snapshot:ro \
   -v "$OUTPUT":/analysis/output:rw \
   -e REA_PROV_OPERATION="$OPERATION" \
   -e REA_PROV_EXIT="$status" \
@@ -159,6 +210,9 @@ podman run --rm \
   -e REA_PROV_SOURCE_SHA="$source_sha" \
   -e REA_PROV_SOURCE_TREE="$source_tree" \
   -e REA_PROV_BASE_DIGEST="$BASE_DIGEST" \
+  -e REA_PROV_SOURCE_BINDING="$source_binding" \
+  -e REA_PROV_INPUT_SHA256="$input_sha256" \
+  -e REA_PROV_INPUT_HOST_PATH="$INPUT" \
   "$image_id" \
   /opt/rea/podman/rea-provenance.mjs "$@" ||
   { echo "rea-analyze: provenance record failed" >&2; exit 4; }
