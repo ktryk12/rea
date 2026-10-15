@@ -69,57 +69,69 @@ const ignoreEntries = (archiveDir) => {
   }
 };
 
+const compare = (archiveDirArg, imageManifestPath) => {
+  const archiveDir = archiveDirArg;
+  statSync(archiveDir);
+  const imageFiles = JSON.parse(readFileSync(imageManifestPath, "utf8"));
+
+  // The commit's own .containerignore decides which of its files the image is
+  // expected to hold, so the rule travels with the commit rather than with
+  // whoever runs this check.
+  const skip = [...ignoreEntries(archiveDir), ...GENERATED_IN_IMAGE];
+  const expected = manifest(archiveDir, skip);
+
+  const missing = [];
+  const modified = [];
+  for (const [path, digest] of Object.entries(expected)) {
+    const actual = imageFiles[path];
+    if (actual === undefined) missing.push(path);
+    else if (actual !== digest)
+      modified.push({ path, expected: digest, actual });
+  }
+  const extra = Object.keys(imageFiles).filter(
+    (path) => expected[path] === undefined,
+  );
+
+  const report = {
+    verdict:
+      missing.length === 0 && modified.length === 0 && extra.length === 0
+        ? "SOURCE_BINDING_VERIFIED"
+        : "SOURCE_BINDING_FAILED",
+    files_expected: Object.keys(expected).length,
+    files_in_image: Object.keys(imageFiles).length,
+    ignored_by_commit: skip,
+    missing_from_image: missing.sort(),
+    modified_in_image: modified.sort((a, b) => (a.path < b.path ? -1 : 1)),
+    not_in_commit: extra.sort(),
+  };
+
+  process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+  process.exitCode = report.verdict === "SOURCE_BINDING_VERIFIED" ? 0 : 1;
+};
+
 const [mode, first, second] = process.argv.slice(2);
 
 if (mode === "--emit") {
   const root = first ?? "/opt/rea";
+  // NEVER follow a large stdout write with process.exit(). Writes to a pipe
+  // are asynchronous, so exiting immediately discards whatever has not been
+  // flushed: this manifest is well over the 64 KiB pipe buffer and was
+  // silently truncated to exactly 65536 bytes while still reporting exit 0.
+  // Returning normally lets node drain stdout, and every path here sets
+  // process.exitCode instead of calling process.exit().
   process.stdout.write(
     `${JSON.stringify(manifest(root, GENERATED_IN_IMAGE), null, 0)}\n`,
   );
-  process.exit(0);
-}
-
-if (mode !== "--compare" || first === undefined || second === undefined) {
+} else if (
+  mode === "--compare" &&
+  first !== undefined &&
+  second !== undefined
+) {
+  compare(first, second);
+} else {
   process.stderr.write(
     "usage: rea-verify-source.mjs --emit <root>\n" +
       "       rea-verify-source.mjs --compare <archiveDir> <imageManifest.json>\n",
   );
-  process.exit(2);
+  process.exitCode = 2;
 }
-
-const archiveDir = first;
-statSync(archiveDir);
-const imageFiles = JSON.parse(readFileSync(second, "utf8"));
-
-// The commit's own .containerignore decides which of its files the image is
-// expected to hold, so the rule travels with the commit rather than with
-// whoever runs this check.
-const skip = [...ignoreEntries(archiveDir), ...GENERATED_IN_IMAGE];
-const expected = manifest(archiveDir, skip);
-
-const missing = [];
-const modified = [];
-for (const [path, digest] of Object.entries(expected)) {
-  const actual = imageFiles[path];
-  if (actual === undefined) missing.push(path);
-  else if (actual !== digest) modified.push({ path, expected: digest, actual });
-}
-const extra = Object.keys(imageFiles).filter(
-  (path) => expected[path] === undefined,
-);
-
-const report = {
-  verdict:
-    missing.length === 0 && modified.length === 0 && extra.length === 0
-      ? "SOURCE_BINDING_VERIFIED"
-      : "SOURCE_BINDING_FAILED",
-  files_expected: Object.keys(expected).length,
-  files_in_image: Object.keys(imageFiles).length,
-  ignored_by_commit: skip,
-  missing_from_image: missing.sort(),
-  modified_in_image: modified.sort((a, b) => (a.path < b.path ? -1 : 1)),
-  not_in_commit: extra.sort(),
-};
-
-process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
-process.exit(report.verdict === "SOURCE_BINDING_VERIFIED" ? 0 : 1);

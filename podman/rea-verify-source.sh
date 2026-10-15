@@ -19,7 +19,20 @@ set -eu
 IMAGE="${1:-${REA_IMAGE:-localhost/rea-runtime:current}}"
 
 repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-work="$(mktemp -d)"
+# Scratch space is kept INSIDE the repository and every native tool is invoked
+# from the repository root with RELATIVE paths only.
+#
+# This is deliberate. On Windows/Git Bash the script runs with
+# MSYS2_ARG_CONV_EXCL='*' so podman receives its mount arguments unmangled,
+# which also stops conversion for native tools: native git rejects a POSIX
+# `-C /e/repos/rea`, and `cygpath -w` mis-maps it in a Git-for-Windows
+# installation whose MSYS root is not the drive root. Relative paths sidestep
+# all of it and behave identically on Linux.
+work_rel=".rea-verify-work"
+work="$repo_root/$work_rel"
+
+# `cd` is a shell builtin, so it needs no path conversion.
+in_repo() { (CDPATH= cd -- "$repo_root" && "$@"); }
 cleanup() { rm -rf "$work"; }
 trap cleanup EXIT INT TERM
 
@@ -49,18 +62,19 @@ echo "image      : $IMAGE"
 echo "image id   : $image_id"
 echo "declared   : $declared"
 
-git -C "$repo_root" cat-file -e "${declared}^{commit}" 2>/dev/null || {
+in_repo git cat-file -e "${declared}^{commit}" 2>/dev/null || {
   echo "rea-verify-source: declared commit is not in this repository: $declared" >&2
   exit 3
 }
 
+rm -rf "$work"
 mkdir -p "$work/archive"
-git -C "$repo_root" archive --format=tar "$declared" | tar -x -C "$work/archive"
+in_repo git archive --format=tar "$declared" | tar -x -C "$work/archive"
 
 podman run --rm --network=none --read-only --cap-drop=ALL \
   --security-opt=no-new-privileges --entrypoint /usr/local/bin/node \
   "$image_id" /opt/rea/podman/rea-verify-source.mjs --emit /opt/rea \
   > "$work/image-manifest.json"
 
-node "$repo_root/podman/rea-verify-source.mjs" --compare \
-  "$work/archive" "$work/image-manifest.json"
+in_repo node podman/rea-verify-source.mjs --compare \
+  "$work_rel/archive" "$work_rel/image-manifest.json"
