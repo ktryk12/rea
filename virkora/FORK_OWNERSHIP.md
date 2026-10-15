@@ -152,6 +152,12 @@ node scripts/rea.mjs --version      # CLI smoke
 node scripts/rea.mjs capabilities --json
 ```
 
+Reproducible and containerised variants of these steps, plus the isolated
+analysis profile, are in [podman/README.md](../podman/README.md). The measured
+state of the test suites on both hosts is in
+[TEST_BASELINE.md](TEST_BASELINE.md); read it before treating any test failure
+in this fork as new.
+
 `npm run compile` is the minimal path to a working `dist/`. The broader
 `npm run build` and `npm run check:*` targets additionally drive turbo, knip,
 oxlint, oxfmt, and artifact generators; they are useful but not required to
@@ -185,6 +191,14 @@ server identity that agent clients key their configuration on, break
 registry entry. Per the fork mandate, a namespace change requires a documented
 compatibility analysis first; it is not a prerequisite for independent
 development and is not done here.
+
+### Fork-local documents
+
+Fork-specific documentation lives in `virkora/`, not in `docs/`. `docs/` is
+built by VitePress with no `ignoreDeadLinks`, so fork-local files there would
+either break the docs build or have to be registered in the upstream sidebar.
+Keeping them separate also avoids merge conflicts in `docs/` when upstream
+changes are pulled in.
 
 ## 7. Boundaries this fork must respect
 

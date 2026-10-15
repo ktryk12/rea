@@ -15,7 +15,14 @@ FROM docker.io/library/node@sha256:83f1c388c31fb2e51f7cbd4dea949b96260798c98f206
 # would silently install a different toolchain and defeat the point of pinning
 # the base by digest. If this version disappears from the Alpine repository the
 # build must FAIL loudly so the pin is updated deliberately.
-RUN apk add --no-cache git=2.54.0-r0
+#
+# procps-ng supplies a procps-compatible `ps`. Alpine ships busybox `ps`, which
+# REA's Linux process-ownership inspection rejects ("requires a
+# procps-compatible ps on REA's PATH"), producing test failures that say
+# nothing about REA. It is GPL-2.0-or-later AND LGPL-2.1-or-later; this is a
+# local development/test image that is not redistributed, and it is
+# deliberately NOT added to the analysis runtime image.
+RUN apk add --no-cache git=2.54.0-r0 procps-ng=4.0.6-r0
 
 # Unprivileged build user. The node image already ships uid/gid 1000 as "node".
 USER node
