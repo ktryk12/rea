@@ -94,6 +94,46 @@ podman run --rm --network=none --security-opt=no-new-privileges --cap-drop=ALL \
 Keep `--ignore-scripts`. This volume is for development only; never use it to
 perform an analysis.
 
+## Building the runtime: from a commit, not the working tree
+
+Use `podman/rea-build-runtime.sh`. It exports the commit with `git archive` and
+builds from that, so the declared commit and the image contents agree by
+construction:
+
+```sh
+./podman/rea-build-runtime.sh            # defaults to HEAD
+```
+
+A dirty working tree is refused; `REA_ALLOW_DIRTY=1` overrides it and the image
+is labelled `dirty`, which every run records.
+
+This is not theoretical tidiness. The first content-level source check found an
+image that matched its commit in all 3804 tracked files yet also carried four
+gitignored build artefacts (`build/fixtures/rea-ghidra-*`) picked up from the
+working directory. An image that declares a commit must not contain files that
+commit does not have.
+
+## Proving the runtime matches its commit
+
+```sh
+./podman/rea-verify-source.sh localhost/rea-runtime:current
+```
+
+An image label and a baked-in SHA only _state_ a commit; they are declarations
+by whoever built the image. This compares content: `git archive <commit>` is
+reconstructed and every source file in the image is hashed against it. Missing,
+modified or unexpected files all fail, and the report names them.
+
+`git archive` is used rather than raw blobs because it applies `.gitattributes`
+text conversion, reproducing a checkout exactly. That matters here: the
+repository sets `* text=auto eol=lf` but `*.cmd text eol=crlf`, so a raw blob
+comparison would flag the three tracked `.cmd` fixtures on every honest build.
+
+`rea-analyze.sh` always performs the cheap label/baked-SHA agreement check
+before touching any input. Set `REA_REQUIRE_SOURCE_BINDING=1` to demand the
+full content check as well; the manifest records which of the two ran as
+`runtime.source_binding`, so a record never implies a check that did not happen.
+
 ## Analysis runtime image
 
 Built with the source commit recorded as an image label:
@@ -118,7 +158,7 @@ The image runs `npm ci --ignore-scripts` and `npm run compile` at build time, so
 Example:
 
 ```sh
-./podman/rea-analyze.sh ./sample.zip ./out inspect-artifact /analysis/input
+./podman/rea-analyze.sh ./sample.zip ./out inspect-artifact /snapshot/input
 ```
 
 ### Argument handling is a security boundary
@@ -139,19 +179,19 @@ future REA version adds does not become callable until it is added deliberately.
 
 ### Enforced properties
 
-| Requirement                                    | How                                                                     |
-| ---------------------------------------------- | ----------------------------------------------------------------------- |
-| No Docker Desktop / daemon                     | Podman only; nothing references Docker                                  |
-| No Podman socket in analysis processes         | The socket is never mounted (verified absent in-container)              |
-| No privileged containers                       | No `--privileged`; `--cap-drop=ALL`, `--security-opt=no-new-privileges` |
-| Rootless                                       | Verified rootless with the `crun` runtime                               |
-| Read-only analysis input                       | `-v "$INPUT":/analysis/input:ro` (writes fail `EROFS`)                  |
-| Isolated output                                | `-v "$OUTPUT":/analysis/output:rw`, the only writable bind mount        |
-| No host credentials or production repositories | Nothing else is mounted                                                 |
-| Pinned bases and dependencies                  | Base pinned by digest; deps from the committed lockfile                 |
-| No arbitrary command execution                 | Direct argv, no shell, explicit operation allowlist                     |
-| Identifiable runtime                           | Immutable image; ID and source SHA recorded per run                     |
-| No change to existing Podman workloads         | Only new images and a new volume are created                            |
+| Requirement                                    | How                                                                                    |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------- |
+| No Docker Desktop / daemon                     | Podman only; nothing references Docker                                                 |
+| No Podman socket in analysis processes         | The socket is never mounted (verified absent in-container)                             |
+| No privileged containers                       | No `--privileged`; `--cap-drop=ALL`, `--security-opt=no-new-privileges`                |
+| Rootless                                       | Verified rootless with the `crun` runtime                                              |
+| Read-only analysis input                       | an immutable snapshot volume at `/snapshot/input`, mounted `:ro` (writes fail `EROFS`) |
+| Isolated output                                | `-v "$OUTPUT":/analysis/output:rw`, the only writable bind mount                       |
+| No host credentials or production repositories | Nothing else is mounted                                                                |
+| Pinned bases and dependencies                  | Base pinned by digest; deps from the committed lockfile                                |
+| No arbitrary command execution                 | Direct argv, no shell, explicit operation allowlist                                    |
+| Identifiable runtime                           | Immutable image; ID and source SHA recorded per run                                    |
+| No change to existing Podman workloads         | Only new images and a new volume are created                                           |
 
 Additionally: `--network=none` (DNS fails `EAI_AGAIN`), `--read-only` root
 filesystem (writes fail `EROFS`), a capped `noexec,nosuid` tmpfs for `/tmp`,
@@ -214,6 +254,48 @@ Adding any of them is a separate decision with its own licensing review.
 `rea capabilities --json` reports per-provider availability and an
 `availability_code` (for example `unsupported_host`), so a caller can always
 tell "not available here" from "observed nothing".
+
+## The verification gate
+
+All of the above is wrapped in one script so that CI and a developer run the
+same checks:
+
+```sh
+./podman/ci-gate.sh static       # npm ci, typecheck, compile, format, lint, domain tests
+./podman/ci-gate.sh provenance   # build from commit, source binding (positive and negative)
+./podman/ci-gate.sh negative     # container and provenance regression scenarios
+./podman/ci-gate.sh all
+```
+
+The negative stage covers every regression this work produced: argument
+injection, the operation allowlist, read-only root filesystem, no network, no
+container socket, no shell from the image, refusal of symbolic links and
+special files, directory digests that distinguish a rename from swapped
+filenames, and output paths recorded relative rather than as basenames.
+
+`.github/workflows/virkora-gate.yml` calls this script and nothing else, so CI
+cannot drift from local behaviour. It references no secrets, holds only
+`contents: read`, publishes nothing, is guarded to this repository, and pins
+both actions to commit SHAs.
+
+Two notes for anyone running it:
+
+- The gate needs rootless podman on the runner host. A containerised CI agent
+  would need the container socket passed in, which hands that step control of
+  the host's containers - acceptable for CI, but a deliberate decision.
+- Workflows did not run on this fork at first: GitHub reported zero registered
+  workflows and zero runs after several pushes and a pull request. Pushing this
+  workflow activated Actions for the fork, which also activated three inherited
+  upstream workflows (`ci.yml`, `pr-title.yml`, and `pr-readiness.yml`, the last
+  on `pull_request_target`). `release.yml` is not registered while nothing
+  pushes to `main`, but it triggers on `push` to `main`, so a merge would start
+  it. Disable the inherited workflows on the fork before merging if that is not
+  wanted; it needs no change to upstream files:
+
+  ```sh
+  gh api repos/ktryk12/rea/actions/workflows --jq '.workflows[] | "\(.id) \(.path)"'
+  gh api -X PUT repos/ktryk12/rea/actions/workflows/<id>/disable
+  ```
 
 ## Do not disturb the existing environment
 

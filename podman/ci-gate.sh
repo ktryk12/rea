@@ -108,19 +108,24 @@ run_provenance() {
     sh "$repo_root/podman/rea-verify-source.sh" "$IMAGE"
 
   # A. Negative source binding: change source files, keep the declared commit.
-  # podman accepts a POSIX path for -v but NOT as a build context on Windows
-  # (it resolved /e/repos/rea/... to E:\eeposea\...), so the context is
-  # given relative to the repository root and podman is run from there.
+  # podman accepts a POSIX path for -v but NOT as a build context in this
+  # environment: an absolute POSIX path was resolved under the wrong drive root
+  # and the build failed with 'context must be a directory'. The context is
+  # therefore relative to the repository root, with podman run from there.
   tamper_rel=".rea-gate-tamper"
   tamper="$repo_root/$tamper_rel"
   rm -rf "$tamper"
   mkdir -p "$tamper"
-  {
-    echo "FROM $IMAGE"
-    echo "USER root"
-    echo "RUN printf '\\n// injected\\n' >> /opt/rea/scripts/rea.mjs"
-    echo "USER node"
-  } > "$tamper/Containerfile"
+  # A quoted heredoc, not `echo`: dash's echo expands backslash escapes while
+  # bash's does not, so the generated Containerfile was valid locally and a
+  # syntax error on CI ("unterminated quoted string"). The appended text is
+  # written by a shell inside the build, so it must survive two levels intact.
+  cat > "$tamper/Containerfile" <<TAMPER
+FROM $IMAGE
+USER root
+RUN echo >> /opt/rea/scripts/rea.mjs && echo '// injected' >> /opt/rea/scripts/rea.mjs
+USER node
+TAMPER
   in_repo podman build -q -f "$tamper_rel/Containerfile" -t localhost/rea-gate-tamper:test "$tamper_rel" >/dev/null
   expect_output '"verdict": "SOURCE_BINDING_FAILED"' \
     "source binding rejects modified sources under a held-constant SHA" \
