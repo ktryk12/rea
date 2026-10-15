@@ -213,6 +213,25 @@ agent (`WOODPECKER_BACKEND=docker`, podman socket bound at
 than a default. A self-hosted GitHub Actions runner on a host with rootless
 podman runs the gate unmodified.
 
+## 4a. Architecture decision: GitHub is version control, not CI
+
+Owner decision after the CI investigation above: this fork uses GitHub for
+version control only. Verification runs through `podman/ci-gate.sh` and
+Woodpecker. Consequently:
+
+- GitHub Actions is **disabled at the repository level**
+  (`gh api repos/ktryk12/rea/actions/permissions --jq '.enabled'` returns
+  `false`), so none of the 29 inherited upstream workflows run here, and the
+  merge-time `release.yml` risk described in section 4 is closed at the source
+  rather than per workflow.
+- `.github/workflows/virkora-gate.yml` is **removed** from this branch. The
+  gate itself stays: `podman/ci-gate.sh` and every security test are unchanged.
+- The inherited upstream workflow files are left on disk untouched. Deleting
+  them would conflict on every upstream change, and with Actions disabled they
+  are inert.
+- Upstream's GitHub workflows are explicitly **not** part of our verification or
+  release process, and no further effort goes into making them pass.
+
 ## 5. Test results
 
 Local, at `da8453a15233cb78c5b6f0c927dfed642b16cbd7`, Windows 11 host with

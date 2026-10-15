@@ -304,19 +304,23 @@ Two notes for anyone running it:
 - The gate needs rootless podman on the runner host. A containerised CI agent
   would need the container socket passed in, which hands that step control of
   the host's containers - acceptable for CI, but a deliberate decision.
-- Workflows did not run on this fork at first: GitHub reported zero registered
-  workflows and zero runs after several pushes and a pull request. Pushing this
-  workflow activated Actions for the fork, which also activated three inherited
-  upstream workflows (`ci.yml`, `pr-title.yml`, and `pr-readiness.yml`, the last
-  on `pull_request_target`). `release.yml` is not registered while nothing
-  pushes to `main`, but it triggers on `push` to `main`, so a merge would start
-  it. Disable the inherited workflows on the fork before merging if that is not
-  wanted; it needs no change to upstream files:
+- **GitHub Actions is deliberately disabled for this repository.** The
+  architecture rule for this fork is that GitHub provides version control, not
+  CI: verification runs through these scripts and through Woodpecker. Actions is
+  switched off at the repository level, so the 29 workflow files inherited from
+  upstream do not run here and are not part of our verification or release
+  process. They are left on disk unchanged, because deleting them would create
+  conflicts every time upstream changes them.
+
+  Verify the setting with:
 
   ```sh
-  gh api repos/ktryk12/rea/actions/workflows --jq '.workflows[] | "\(.id) \(.path)"'
-  gh api -X PUT repos/ktryk12/rea/actions/workflows/<id>/disable
+  gh api repos/ktryk12/rea/actions/permissions --jq '.enabled'   # false
   ```
+
+  Do not add a workflow file to re-enable it. Pushing one is what activated
+  Actions in the first place, which also activated three upstream workflows,
+  one of them on `pull_request_target`.
 
 ## Do not disturb the existing environment
 
