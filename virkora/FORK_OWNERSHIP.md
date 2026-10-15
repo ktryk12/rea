@@ -7,14 +7,14 @@ work of its original author; this fork adds no claim over it.
 
 ## 1. Provenance
 
-| Fact | Value |
-| --- | --- |
-| Our fork | `https://github.com/ktryk12/rea` (real GitHub fork) |
-| Upstream | `https://github.com/morluto/rea` (MIT, default branch `main`) |
-| Fork point | `f8f3593a8c8c77a78f6ad192f2e4d3becf4bb409` |
-| Local working copy | `E:\repos\rea` |
-| Development branch | `feat/virkora-adaptation-v1` |
-| History | 3261 commits, root commit `729d3e927cbcf17224e6b988eebcfae0d215c876` |
+| Fact               | Value                                                                |
+| ------------------ | -------------------------------------------------------------------- |
+| Our fork           | `https://github.com/ktryk12/rea` (real GitHub fork)                  |
+| Upstream           | `https://github.com/morluto/rea` (MIT, default branch `main`)        |
+| Fork point         | `f8f3593a8c8c77a78f6ad192f2e4d3becf4bb409`                           |
+| Local working copy | `E:\repos\rea`                                                       |
+| Development branch | `feat/virkora-adaptation-v1`                                         |
+| History            | 3261 commits, root commit `729d3e927cbcf17224e6b988eebcfae0d215c876` |
 
 Full upstream history is present. The previously observed upstream commit
 `ce89706145dd98fbaa8df8f062fdc80777136940` is an ancestor of our fork point.
@@ -74,13 +74,13 @@ Five submodules pin third-party inspection sources. All are **uninitialized** in
 this working copy and are not required to build, typecheck, compile, or run the
 CLI/MCP server.
 
-| Submodule | Pinned commit | License |
-| --- | --- | --- |
-| `third_party/binwalk` | `4fdab3d464d97b68e0af9088df3f9e2e1545b21c` | MIT |
-| `third_party/ghidra-nativeaot` | `effeb734fc570c32650f88b159608979dc7b423e` | MIT |
+| Submodule                       | Pinned commit                              | License    |
+| ------------------------------- | ------------------------------------------ | ---------- |
+| `third_party/binwalk`           | `4fdab3d464d97b68e0af9088df3f9e2e1545b21c` | MIT        |
+| `third_party/ghidra-nativeaot`  | `effeb734fc570c32650f88b159608979dc7b423e` | MIT        |
 | `third_party/jadx-headless-mcp` | `5844800a486d2248fa949b74c9896285f5b54de2` | Apache-2.0 |
-| `third_party/unblob` | `1fcc7a0a584a70a96c31f5a276c20944d199a089` | MIT |
-| `third_party/wakaru` | `8219bf5016a063d7fb215101a8c45d5959ec733f` | Apache-2.0 |
+| `third_party/unblob`            | `1fcc7a0a584a70a96c31f5a276c20944d199a089` | MIT        |
+| `third_party/wakaru`            | `8219bf5016a063d7fb215101a8c45d5959ec733f` | Apache-2.0 |
 
 They point at third-party repositories, not at upstream REA, so upstream going
 away does not affect them. Each is pinned to a commit, so availability is the
@@ -120,23 +120,23 @@ platform binary (`@typescript/typescript-win32-x64`), and `--omit=optional` make
 
 Measured, not assumed:
 
-| Coupling | Reality | Needed to build or run? |
-| --- | --- | --- |
-| `rea.tools` website | Documentation links and a docs-fact check in `scripts/lib/docs-facts.mjs` | No |
-| `morluto/rea` strings | `package.json` metadata, `server.json`, release-note and website scripts | No |
-| `rea-agents` on npm | Only `rea update`, which resolves the latest version for a **globally installed** package | No - not used from a source checkout |
-| `api.github.com` | `scripts/ci/artifacts.mjs`, upstream CI artifact handling | No |
-| `install.sh` | Upstream pipe-to-shell installer that fetches Node and the npm package | No - never used here |
-| JADX jar URL | `src/android/JadxRelease.ts` pins a third-party release jar | Only for Android analysis |
-| Submodules | Third-party repos, pinned | No |
-| Containers | **No coupling at all** - no Containerfile, Dockerfile, compose file, or docker/podman reference in `src/` or `scripts/` | No |
+| Coupling              | Reality                                                                                                                 | Needed to build or run?              |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `rea.tools` website   | Documentation links and a docs-fact check in `scripts/lib/docs-facts.mjs`                                               | No                                   |
+| `morluto/rea` strings | `package.json` metadata, `server.json`, release-note and website scripts                                                | No                                   |
+| `rea-agents` on npm   | Only `rea update`, which resolves the latest version for a **globally installed** package                               | No - not used from a source checkout |
+| `api.github.com`      | `scripts/ci/artifacts.mjs`, upstream CI artifact handling                                                               | No                                   |
+| `install.sh`          | Upstream pipe-to-shell installer that fetches Node and the npm package                                                  | No - never used here                 |
+| JADX jar URL          | `src/android/JadxRelease.ts` pins a third-party release jar                                                             | Only for Android analysis            |
+| Submodules            | Third-party repos, pinned                                                                                               | No                                   |
+| Containers            | **No coupling at all** - no Containerfile, Dockerfile, compose file, or docker/podman reference in `src/` or `scripts/` | No                                   |
 
 **Conclusion:** nothing in the build, typecheck, compile, CLI, or MCP path
 requires upstream REA, `rea.tools`, or the published npm package. This fork is
 already operationally independent from a pinned lockfile. If upstream were
 archived tomorrow, this repository would continue to build and run.
 
-Still external and genuinely required for *full* capability: the bring-your-own
+Still external and genuinely required for _full_ capability: the bring-your-own
 analysis engines, and `registry.npmjs.org` for a cold `npm ci` (mitigate with a
 vendored cache or an internal mirror if offline builds are needed).
 

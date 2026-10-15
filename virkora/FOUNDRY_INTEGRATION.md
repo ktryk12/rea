@@ -32,11 +32,11 @@ evidence report  -> back to Foundry for reuse and qualification judgement
 This separation is the architectural point, and collapsing it is the main risk
 of integrating an analysis tool at all.
 
-| Question | Who answers it | Where it lives |
-| --- | --- | --- |
-| What can the analysis tool *perform*? | REA | `rea capabilities --json` — operations, effects, availability |
-| What behaviour must a software solution *exhibit* to qualify? | Foundry | `contracts/foundry-capability` — `CapabilityContract` |
-| What is *authorised*? | Foundation / Virkora | the existing authority path |
+| Question                                                      | Who answers it       | Where it lives                                                |
+| ------------------------------------------------------------- | -------------------- | ------------------------------------------------------------- |
+| What can the analysis tool _perform_?                         | REA                  | `rea capabilities --json` — operations, effects, availability |
+| What behaviour must a software solution _exhibit_ to qualify? | Foundry              | `contracts/foundry-capability` — `CapabilityContract`         |
+| What is _authorised_?                                         | Foundation / Virkora | the existing authority path                                   |
 
 REA describing its own operations is **not** a capability contract, and it is
 **not** permission. A REA operation becoming available must never, by itself,
@@ -46,12 +46,12 @@ widen what Foundry may ask for or what Virkora may authorise.
 
 Read from `virkora-foundry`. Each row corrects a reuse assumption.
 
-| Component | What the code actually supports | Consequence for REA |
-| --- | --- | --- |
-| `code-intelligence/deep-adapters` | A **frozen static registry** of **in-process Rust** adapters. `AdapterDescriptor.run` is `fn(&str, &FileContext<'_>) -> AdapterOutput`, and `ADAPTERS` is a `static` table analysing source files. | REA is an out-of-process Node process analysing binaries. It **cannot** be an entry here. Only the *principle* transfers (see 3.1). |
-| `contracts/foundry-capability` | F3.4.1 `CapabilityContract`: "what observable behaviour must hold, not how an implementation is expected to represent that behaviour." Its own doc comment lists what it **may not** describe, including "expected record kinds, evidence types" and "implementation vocabulary". Claims are adjudicated individually (`SUPPORTED` / `INDETERMINATE`). | REA's operation names and `effects` vocabulary are exactly the implementation vocabulary this contract forbids. Pouring them in would be a category error and would turn the contract into "an elaborate matcher", which its doc comment exists to prevent. |
-| `contracts/foundry-evidence` | `RunRecord` + `EvidenceSink`. Deliberately **weak**: `metrics` is a string-keyed map and `outcome` is a string, specifically so the storage layer never learns a producer's semantics (Charter §7.5). | REA's rich Evidence record is **not** automatically compatible. It stays producer-side; only a thin projection (identity, operation, outcome, digests, counts) goes into a `RunRecord`. |
-| `apps/software-adapter-conformance` | States plainly: "**This is conformance, not integration.**" It proves Rust-produced bytes are accepted by Virkora's canonical Python `SoftwareRequestV1.from_json`. A four-field envelope, no transport, no trusted ingress, and it may never carry a grant, signature, policy result or requester identity. | It does **not** execute REA analyses and cannot qualify one today. It is the right place to prove a REA *request* is well-formed; running the analysis is separate, new work. |
+| Component                           | What the code actually supports                                                                                                                                                                                                                                                                                                                        | Consequence for REA                                                                                                                                                                                                                                         |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `code-intelligence/deep-adapters`   | A **frozen static registry** of **in-process Rust** adapters. `AdapterDescriptor.run` is `fn(&str, &FileContext<'_>) -> AdapterOutput`, and `ADAPTERS` is a `static` table analysing source files.                                                                                                                                                     | REA is an out-of-process Node process analysing binaries. It **cannot** be an entry here. Only the _principle_ transfers (see 3.1).                                                                                                                         |
+| `contracts/foundry-capability`      | F3.4.1 `CapabilityContract`: "what observable behaviour must hold, not how an implementation is expected to represent that behaviour." Its own doc comment lists what it **may not** describe, including "expected record kinds, evidence types" and "implementation vocabulary". Claims are adjudicated individually (`SUPPORTED` / `INDETERMINATE`). | REA's operation names and `effects` vocabulary are exactly the implementation vocabulary this contract forbids. Pouring them in would be a category error and would turn the contract into "an elaborate matcher", which its doc comment exists to prevent. |
+| `contracts/foundry-evidence`        | `RunRecord` + `EvidenceSink`. Deliberately **weak**: `metrics` is a string-keyed map and `outcome` is a string, specifically so the storage layer never learns a producer's semantics (Charter §7.5).                                                                                                                                                  | REA's rich Evidence record is **not** automatically compatible. It stays producer-side; only a thin projection (identity, operation, outcome, digests, counts) goes into a `RunRecord`.                                                                     |
+| `apps/software-adapter-conformance` | States plainly: "**This is conformance, not integration.**" It proves Rust-produced bytes are accepted by Virkora's canonical Python `SoftwareRequestV1.from_json`. A four-field envelope, no transport, no trusted ingress, and it may never carry a grant, signature, policy result or requester identity.                                           | It does **not** execute REA analyses and cannot qualify one today. It is the right place to prove a REA _request_ is well-formed; running the analysis is separate, new work.                                                                               |
 
 ### 3.1 What does genuinely transfer
 
@@ -68,7 +68,7 @@ reports `available`, a `reason`, and an `availability_code` (e.g.
 `unknown`), `limitations[]` and per-facet `facet_availability`. Comparisons keep
 a dimension `unknown` rather than guessing.
 
-So the two systems share a *stance* on absence. They do not share a schema.
+So the two systems share a _stance_ on absence. They do not share a schema.
 
 ## 4. What must therefore be built
 
@@ -80,7 +80,7 @@ A **versioned, approved REA operation surface** owned by Foundry:
 2. `rea capabilities --json` is **discovery input only**. It is used to detect
    what a given REA build offers, and to detect drift against the approved
    surface. A new REA version that adds or renames operations produces a
-   *diff to review*, never an automatic grant. The same applies in reverse: an
+   _diff to review_, never an automatic grant. The same applies in reverse: an
    operation disappearing must be reported, not silently skipped.
 3. A projection from a REA Evidence record into `foundry-evidence::RunRecord`
    that keeps the rich record addressable rather than flattened: record

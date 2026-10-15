@@ -12,10 +12,10 @@ Suite under test: `npm run test:fast` (`node scripts/ci/test-group.mjs source`),
 
 ## Headline
 
-| Host | Command | Exit | Failed | Passed | Skipped |
-| --- | --- | --- | --- | --- | --- |
-| Windows 11, Node v24.11.1, source checkout | `npm run test:fast` | 1 | **214** | 7740 | 138 |
-| Linux in Podman, Node v24.21.0 | same, `localhost/rea-build:pinned` | 1 | **39** | 8045 | 8 |
+| Host                                       | Command                            | Exit | Failed  | Passed | Skipped |
+| ------------------------------------------ | ---------------------------------- | ---- | ------- | ------ | ------- |
+| Windows 11, Node v24.11.1, source checkout | `npm run test:fast`                | 1    | **214** | 7740   | 138     |
+| Linux in Podman, Node v24.21.0             | same, `localhost/rea-build:pinned` | 1    | **39**  | 8045   | 8       |
 
 The same code fails 214 tests on Windows and 39 in the container. **175 of the
 Windows failures are host-conditioned, not defects in this fork.** That is the
@@ -46,16 +46,16 @@ Verified by running one file in isolation:
 
 Largest failing files on Windows:
 
-| File | Failed |
-| --- | --- |
-| `src/ida/IdaSessionClient.test.ts` | 43 |
-| `src/ida/IdaContainment.test.ts` | 33 |
-| `src/ida/IdaOperationFailures.test.ts` | 31 |
-| `src/wasm/WabtArtifactProvider.test.ts` | 12 |
-| `src/electron/ElectronFuseProvider.test.ts` | 11 |
-| `src/hopper/HopperTargetLease.test.ts` | 10 |
-| `src/ghidra/GhidraSnapshotCache.test.ts` | 7 |
-| (22 further files) | 1–5 each |
+| File                                        | Failed   |
+| ------------------------------------------- | -------- |
+| `src/ida/IdaSessionClient.test.ts`          | 43       |
+| `src/ida/IdaContainment.test.ts`            | 33       |
+| `src/ida/IdaOperationFailures.test.ts`      | 31       |
+| `src/wasm/WabtArtifactProvider.test.ts`     | 12       |
+| `src/electron/ElectronFuseProvider.test.ts` | 11       |
+| `src/hopper/HopperTargetLease.test.ts`      | 10       |
+| `src/ghidra/GhidraSnapshotCache.test.ts`    | 7        |
+| (22 further files)                          | 1–5 each |
 
 The IDA clusters are a secondary effect of the same root cause: with no private
 runtime root, every operation fails as a generic `ProviderAdapterError` instead
@@ -72,14 +72,14 @@ suite passes on Windows.
 All 39 are attributable, and **none** indicate a defect in this fork. Every
 remaining failure is a missing bring-your-own tool.
 
-| Cause | Failed | File(s) |
-| --- | --- | --- |
-| Apktool not installed (BYO) | 20 | `src/apktool/ApktoolProvider.test.ts`, `src/apktool/ApktoolVersionProbe.lifecycle.test.ts` |
-| WABT / `wasm2wat` not installed (BYO) | 12 | `src/wasm/WabtArtifactProvider.test.ts` |
-| Playwright browsers not installed | 4 | `src/browser/PlaywrightElectronActiveProvider.test.ts` |
-| Rizin not installed (BYO) | 1 | `tests/composition/reverseEngineeringCancellation.test.ts` ("Rizin provider and descendant did not start in time") |
-| **harness gap, now fixed** | 1 | `src/process/ProcessOwnership.identity.test.ts` |
-| **harness gap, now fixed** | 1 | `tests/conformance/readmeConsistency.test.ts` |
+| Cause                                 | Failed | File(s)                                                                                                            |
+| ------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------ |
+| Apktool not installed (BYO)           | 20     | `src/apktool/ApktoolProvider.test.ts`, `src/apktool/ApktoolVersionProbe.lifecycle.test.ts`                         |
+| WABT / `wasm2wat` not installed (BYO) | 12     | `src/wasm/WabtArtifactProvider.test.ts`                                                                            |
+| Playwright browsers not installed     | 4      | `src/browser/PlaywrightElectronActiveProvider.test.ts`                                                             |
+| Rizin not installed (BYO)             | 1      | `tests/composition/reverseEngineeringCancellation.test.ts` ("Rizin provider and descendant did not start in time") |
+| **harness gap, now fixed**            | 1      | `src/process/ProcessOwnership.identity.test.ts`                                                                    |
+| **harness gap, now fixed**            | 1      | `tests/conformance/readmeConsistency.test.ts`                                                                      |
 
 ### The two harness gaps were ours, and are closed
 
@@ -90,7 +90,7 @@ Both were defects in how the container was prepared, not in REA:
    REA's PATH"). `procps-ng=4.0.6-r0` is now pinned in
    `podman/Containerfile.rea-build`. Re-verified in the rebuilt image:
    `src/process/ProcessOwnership.identity.test.ts` → **9/9 passed**.
-   It is deliberately *not* added to the analysis runtime image, to keep that
+   It is deliberately _not_ added to the analysis runtime image, to keep that
    image's toolset minimal.
 2. **`website/` excluded from the container copy.** The copy command omitted
    `website/`, so a conformance test that reads it failed. Re-verified with the
@@ -116,13 +116,13 @@ and pass on Windows, which is why Windows reports 138 skips and Linux 8.
 These are the suites that carry real signal for fork maintenance, since they do
 not depend on any external engine or host-specific artefact:
 
-| Suite | Host | Result |
-| --- | --- | --- |
-| `vitest run --project domain` | Windows | **3233 / 3233 passed** |
-| `vitest run --project domain` | container, `--network=none` | **3230 passed, 3 skipped** |
-| `tsc --noEmit` | both | exit 0 |
-| `npm run compile` | both | exit 0 |
-| `oxfmt --check`, `oxlint` (changed files) | Windows | exit 0 |
+| Suite                                     | Host                        | Result                     |
+| ----------------------------------------- | --------------------------- | -------------------------- |
+| `vitest run --project domain`             | Windows                     | **3233 / 3233 passed**     |
+| `vitest run --project domain`             | container, `--network=none` | **3230 passed, 3 skipped** |
+| `tsc --noEmit`                            | both                        | exit 0                     |
+| `npm run compile`                         | both                        | exit 0                     |
+| `oxfmt --check`, `oxlint` (changed files) | Windows                     | exit 0                     |
 
 ## How to reproduce
 

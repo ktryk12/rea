@@ -10,10 +10,10 @@ Everything here is additive and optional.
 
 There are two images, and the split matters:
 
-| Image | Built from | Mutable? | Purpose |
-| --- | --- | --- | --- |
-| `localhost/rea-build:pinned` | `Containerfile.rea-build` | source bind-mounted, deps in a named volume | development, typecheck, test runs |
-| `localhost/rea-runtime:<sha>` | `Containerfile.rea-runtime` | **no** — source and `dist/` are baked in | performing analyses |
+| Image                         | Built from                  | Mutable?                                    | Purpose                           |
+| ----------------------------- | --------------------------- | ------------------------------------------- | --------------------------------- |
+| `localhost/rea-build:pinned`  | `Containerfile.rea-build`   | source bind-mounted, deps in a named volume | development, typecheck, test runs |
+| `localhost/rea-runtime:<sha>` | `Containerfile.rea-runtime` | **no** — source and `dist/` are baked in    | performing analyses               |
 
 Analyses run **only** on the runtime image. A build image plus a mutable named
 volume cannot prove which REA bytes performed an analysis, because anything can
@@ -139,19 +139,19 @@ future REA version adds does not become callable until it is added deliberately.
 
 ### Enforced properties
 
-| Requirement | How |
-| --- | --- |
-| No Docker Desktop / daemon | Podman only; nothing references Docker |
-| No Podman socket in analysis processes | The socket is never mounted (verified absent in-container) |
-| No privileged containers | No `--privileged`; `--cap-drop=ALL`, `--security-opt=no-new-privileges` |
-| Rootless | Verified rootless with the `crun` runtime |
-| Read-only analysis input | `-v "$INPUT":/analysis/input:ro` (writes fail `EROFS`) |
-| Isolated output | `-v "$OUTPUT":/analysis/output:rw`, the only writable bind mount |
-| No host credentials or production repositories | Nothing else is mounted |
-| Pinned bases and dependencies | Base pinned by digest; deps from the committed lockfile |
-| No arbitrary command execution | Direct argv, no shell, explicit operation allowlist |
-| Identifiable runtime | Immutable image; ID and source SHA recorded per run |
-| No change to existing Podman workloads | Only new images and a new volume are created |
+| Requirement                                    | How                                                                     |
+| ---------------------------------------------- | ----------------------------------------------------------------------- |
+| No Docker Desktop / daemon                     | Podman only; nothing references Docker                                  |
+| No Podman socket in analysis processes         | The socket is never mounted (verified absent in-container)              |
+| No privileged containers                       | No `--privileged`; `--cap-drop=ALL`, `--security-opt=no-new-privileges` |
+| Rootless                                       | Verified rootless with the `crun` runtime                               |
+| Read-only analysis input                       | `-v "$INPUT":/analysis/input:ro` (writes fail `EROFS`)                  |
+| Isolated output                                | `-v "$OUTPUT":/analysis/output:rw`, the only writable bind mount        |
+| No host credentials or production repositories | Nothing else is mounted                                                 |
+| Pinned bases and dependencies                  | Base pinned by digest; deps from the committed lockfile                 |
+| No arbitrary command execution                 | Direct argv, no shell, explicit operation allowlist                     |
+| Identifiable runtime                           | Immutable image; ID and source SHA recorded per run                     |
+| No change to existing Podman workloads         | Only new images and a new volume are created                            |
 
 Additionally: `--network=none` (DNS fails `EAI_AGAIN`), `--read-only` root
 filesystem (writes fail `EROFS`), a capped `noexec,nosuid` tmpfs for `/tmp`,
