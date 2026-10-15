@@ -116,12 +116,28 @@ source_tree="$(podman image inspect --format '{{index .Labels "org.virkora.rea.s
 
 BASE_DIGEST="sha256:83f1c388c31fb2e51f7cbd4dea949b96260798c98f206e8e4696bc93bd964e3a"
 
+# Map the calling user into the container when podman is rootless.
+#
+# Without this, the container process is the image user (uid 1000) while the
+# bind-mounted output directory belongs to the invoking host user. Rootless
+# podman maps those to different ids, so writing the provenance record failed
+# with EACCES on a host whose uid is not 1000 - which is exactly what happened
+# on CI, while a local run on a different host silently worked. Image files are
+# world-readable, so reading /opt/rea is unaffected.
+#
+# keep-id is only valid for rootless podman; under a root podman the ids
+# already line up and passing it would be an error.
+USERNS=""
+if [ "$(podman info --format '{{.Host.Security.Rootless}}' 2>/dev/null)" = "true" ]; then
+  USERNS="--userns=keep-id"
+fi
+
 # Verify the runtime BEFORE it analyses anything. The source commit baked into
 # the image must agree with the label on the image ID we resolved; otherwise
 # this is not an image built by Containerfile.rea-runtime as claimed, and its
 # provenance would be a fiction. Checking afterwards would still refuse the
 # record, but only once an unverified runtime had already touched the input.
-baked_sha="$(podman run --rm --network=none --read-only --cap-drop=ALL \
+baked_sha="$(podman run --rm $USERNS --network=none --read-only --cap-drop=ALL \
   --security-opt=no-new-privileges --entrypoint /usr/local/bin/node \
   "$image_id" -p \
   'require("node:fs").readFileSync("/opt/rea/.rea-source-sha","utf8").trim()' \
@@ -154,7 +170,7 @@ fi
 # own to attest, and following it would leave the declared input.
 snapshot_volume="$(podman volume create)"
 
-input_sha256="$(podman run --rm \
+input_sha256="$(podman run --rm $USERNS \
   --network=none \
   --read-only \
   --cap-drop=ALL \
@@ -171,7 +187,7 @@ if [ -z "$input_sha256" ]; then
 fi
 
 status=0
-podman run --rm \
+podman run --rm $USERNS \
   --network=none \
   --read-only \
   --cap-drop=ALL \
@@ -194,7 +210,7 @@ podman run --rm \
 # real argv elements, so nothing is parsed or encoded by a shell. The script
 # re-checks the snapshot digest and the image provenance, and refuses to write
 # a record it cannot vouch for.
-podman run --rm \
+podman run --rm $USERNS \
   --network=none \
   --read-only \
   --cap-drop=ALL \

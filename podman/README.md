@@ -233,6 +233,19 @@ and `b/report.json` stay distinct instead of collapsing to one `report.json`.
 For a single-file input the wrapper's digest can be compared with REA's own
 `subject.digest.sha256`; in the verified run the two agreed.
 
+### Rootless user mapping
+
+Every container is started with `--userns=keep-id` when podman reports itself
+rootless, so the calling user is mapped into the container.
+
+Without it the container process is the image user (uid 1000) while the
+bind-mounted output directory belongs to the invoking host user. Rootless podman
+maps those to different ids, and writing the provenance record fails with
+`EACCES`. This passed on a host whose uid happens to be 1000 and failed on CI,
+where it is not - the kind of difference only a second platform finds. Image
+files are world-readable, so reading `/opt/rea` is unaffected, and the flag is
+omitted under a root podman where the ids already line up.
+
 ### Windows shell note
 
 Git Bash rewrites container paths and breaks the `-v` and `--entrypoint`

@@ -44,7 +44,16 @@ label_sha="$(podman image inspect --format '{{index .Labels "org.virkora.rea.sou
 # The commit baked into the image must agree with its label before either is
 # used to select sources. Disagreement already means the image is not what it
 # claims, so there is nothing meaningful left to compare against.
-baked_sha="$(podman run --rm --network=none --read-only --cap-drop=ALL \
+# keep-id for the same reason as in rea-analyze.sh: rootless podman otherwise
+# maps the container user to a different host id, and a container write to a
+# bind-mounted directory owned by the invoking user fails with EACCES. These
+# runs only read, but the flag keeps both scripts behaving identically.
+USERNS=""
+if [ "$(podman info --format '{{.Host.Security.Rootless}}' 2>/dev/null)" = "true" ]; then
+  USERNS="--userns=keep-id"
+fi
+
+baked_sha="$(podman run --rm $USERNS --network=none --read-only --cap-drop=ALL \
   --security-opt=no-new-privileges --entrypoint /usr/local/bin/node \
   "$image_id" -p \
   'require("node:fs").readFileSync("/opt/rea/.rea-source-sha","utf8").trim()' \
@@ -71,7 +80,7 @@ rm -rf "$work"
 mkdir -p "$work/archive"
 in_repo git archive --format=tar "$declared" | tar -x -C "$work/archive"
 
-podman run --rm --network=none --read-only --cap-drop=ALL \
+podman run --rm $USERNS --network=none --read-only --cap-drop=ALL \
   --security-opt=no-new-privileges --entrypoint /usr/local/bin/node \
   "$image_id" /opt/rea/podman/rea-verify-source.mjs --emit /opt/rea \
   > "$work/image-manifest.json"
