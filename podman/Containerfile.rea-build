@@ -10,7 +10,12 @@ FROM docker.io/library/node@sha256:83f1c388c31fb2e51f7cbd4dea949b96260798c98f206
 
 # git is required: REA's build reads repository state; isomorphic-git tests and
 # provenance checks expect a usable git binary.
-RUN apk add --no-cache git=2.51.0-r0 || apk add --no-cache git
+#
+# Pinned exactly, with no `||` fallback. A fallback to an unpinned package
+# would silently install a different toolchain and defeat the point of pinning
+# the base by digest. If this version disappears from the Alpine repository the
+# build must FAIL loudly so the pin is updated deliberately.
+RUN apk add --no-cache git=2.54.0-r0
 
 # Unprivileged build user. The node image already ships uid/gid 1000 as "node".
 USER node

@@ -1,0 +1,52 @@
+# Immutable REA analysis runtime (Podman, rootless).
+#
+# Why this exists separately from Containerfile.rea-build:
+# the build image plus a mutable named volume cannot prove WHICH REA bytes
+# performed an analysis, because anything can be written into the volume
+# afterwards. This image compiles REA at build time and is then never written
+# to, so the image ID identifies the exact analysis runtime, and the recorded
+# source commit identifies the exact sources it was compiled from.
+#
+# Base pinned by digest: node:24-alpine, Node v24.21.0, satisfying
+# package.json engines (^24.11.0). Re-pin deliberately; never float the tag.
+FROM docker.io/library/node@sha256:83f1c388c31fb2e51f7cbd4dea949b96260798c98f206e8e4696bc93bd964e3a
+
+# The commit these sources came from. Supplied by the caller and recorded in
+# the image so every analysis can name its source revision.
+ARG REA_SOURCE_SHA=unknown
+ARG REA_SOURCE_DIRTY=unknown
+
+# git is pinned exactly and must resolve. A fallback to an unpinned package
+# would silently change the toolchain, so there is deliberately no `||` here.
+RUN apk add --no-cache git=2.54.0-r0
+
+WORKDIR /opt/rea
+COPY --chown=node:node . .
+
+# Build as root so the tree can be written, then hand ownership to `node`
+# and keep the result read-only at run time.
+# HUSKY=0 keeps the root `prepare` script from installing git hooks.
+# --ignore-scripts is permanent policy for this fork.
+RUN HUSKY=0 npm ci --ignore-scripts --no-fund --no-audit \
+ && HUSKY=0 npm run compile \
+ && printf '%s\n' "$REA_SOURCE_SHA" > /opt/rea/.rea-source-sha \
+ && printf '%s\n' "$REA_SOURCE_DIRTY" > /opt/rea/.rea-source-dirty \
+ && chown -R node:node /opt/rea
+
+LABEL org.virkora.rea.source.sha="${REA_SOURCE_SHA}" \
+      org.virkora.rea.source.dirty="${REA_SOURCE_DIRTY}" \
+      org.virkora.rea.role="analysis-runtime"
+
+USER node
+WORKDIR /analysis/output
+
+# Entrypoint is node itself, set EXPLICITLY. The base image inherits
+# `docker-entrypoint.sh`, which execs a shell for a non-flag argument, so a
+# bare `podman run <image> sh -c ...` would otherwise reach a shell. Pinning
+# the entrypoint to node makes `sh` an argument to node rather than a command.
+#
+# rea-analyze.sh additionally sets `--entrypoint /usr/local/bin/node` and passes
+# the script and its arguments as separate argv elements, so no shell ever
+# parses caller input even if this image is replaced.
+ENTRYPOINT ["/usr/local/bin/node"]
+CMD ["--version"]
