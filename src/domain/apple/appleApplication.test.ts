@@ -94,7 +94,7 @@ const inventoryEvidence = (
     );
   }
   const sortedNodes = [...nodes.values()].sort((left, right) =>
-    left.artifact_id.localeCompare(right.artifact_id),
+    compareUnicodeCodePoints(left.artifact_id, right.artifact_id),
   );
   const sortedOccurrences = occurrences.sort((left, right) =>
     compareUnicodeCodePoints(left.logical_path, right.logical_path),
