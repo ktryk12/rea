@@ -293,6 +293,23 @@ reason for having CI at all:
    ("doesn't map UID 197608"), so naming the container-side ids is the only
    portable form.
 
+### Final gate run, own scripts, against the merged commit
+
+`podman/ci-gate.sh all` at `d7e528da78aee72eb540eb6b2fc8d5038d8b678a`, the
+commit that was merged. Windows 11 host, rootless podman 5.8.3 with crun, host
+Node v24.11.1, runtime container Node v24.21.0:
+
+```
+--- static ---      typecheck, compile, format, lint, domain tests      5 PASS
+--- provenance ---  build from commit, source binding +/-, tampered     4 PASS
+--- negative ---    injection, allowlist, isolation, digests, paths     13 PASS
+--- summary ---     passed: 22  failed: 0                           exit 0
+```
+
+This is the verification of record. The GitHub Actions results above are kept as
+the historical account of how three platform-specific defects were found; Actions
+is now disabled and is not part of the process going forward.
+
 ## 6. Defects found in our own work during this round
 
 Recorded because they bear on how much the gate can be trusted.
