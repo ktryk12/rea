@@ -80,3 +80,4 @@ website/.i18n-*/
 
 # Scratch space for podman/rea-verify-source.sh
 .rea-verify-work/
+.rea-build-context/

@@ -8,3 +8,4 @@ website
 coverage
 test-results.xml
 native/windows/build
+build
